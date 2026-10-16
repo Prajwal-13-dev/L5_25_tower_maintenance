@@ -4,7 +4,6 @@ import sqlite3
 conn = sqlite3.connect(":memory:")
 conn.execute("CREATE TABLE towers (id INTEGER PRIMARY KEY, site TEXT, last_service INTEGER, faults INTEGER)")
 
-service_count = 0
 
 
 def addTower(site, last_service, faults=0):
@@ -18,13 +17,22 @@ def addTower(site, last_service, faults=0):
     conn.commit()
 
 def serviceTower(tower_id, year):
-    global service_count
+    """Record tower servicing and report whether it succeeded."""
     try:
-        conn.execute("UPDATE towers SET last_service = ?, faults = 0 WHERE id = ?", (year, tower_id))
-        service_count += 1
-    except Exception:
-        print("service failed")
+        cursor = conn.execute(
+            "UPDATE towers SET last_service = ?, faults = 0 WHERE id = ?",
+            (year, tower_id),
+        )
+        conn.commit()
+    except sqlite3.Error:
+        print("Service failed because of a database error.")
+        return False
 
+    if cursor.rowcount == 0:
+        print(f"No tower found with ID {tower_id}.")
+        return False
+
+    return True
 
 
 def overdue(year):
@@ -37,11 +45,19 @@ def overdue(year):
 
 
 def riskLevel(tower_id):
-    row = conn.execute("SELECT faults FROM towers WHERE id = ?", (tower_id,)).fetchone()
+    """Return the risk level for a tower."""
+    row = conn.execute(
+        "SELECT faults FROM towers WHERE id = ?",
+        (tower_id,),
+    ).fetchone()
+
+    if row is None:
+        return "unknown"
+
     if row[0] > 3:
         return "high"
-    else:
-        return "normal"
+
+    return "normal"
 
 
 def snapshot():
@@ -49,11 +65,16 @@ def snapshot():
 
 
 def main():
+    """Run a demonstration of the tower maintenance tracker."""
     addTower("Ridge-A", 2021, 5)
     addTower("Coast-B", 2024)
-    serviceTower(2, 2025)
-    total=len(snapshot())
+
+    service_count = int(serviceTower(2, 2025))
+    total = len(snapshot())
+
     print(overdue(2025), riskLevel(1), total, service_count)
 
 
-main()
+if __name__ == "__main__":
+    main()
+
